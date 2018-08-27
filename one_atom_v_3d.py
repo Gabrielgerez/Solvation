@@ -46,15 +46,21 @@ C_tree = vp.FunctionTree(MRA)
 rho_tree = vp.FunctionTree(MRA)
 U_tree = vp.FunctionTree(MRA)
 
+# initializing functiontrees
+
 vp.project(prec, C_tree, C)
 vp.project(prec, rho_tree, rho)
 vp.apply(prec, U_tree, P, rho_tree)
 
+# projecting and applying operators on the FunctionTrees
 
 x_plt = np.linspace(-2, 2, 100)
 C_plt = np.array([C_tree.evalf(x, 0, 0) for x in x_plt])
 U_plt = np.array([U_tree.evalf(x, 0, 0) for x in x_plt])
 # y_plt = np.array([C(x, 0, 0) for x in x_plt])
+
+# all the []_plt variables above are used to check the output by taking 2D
+# slices off the 3D functions
 
 plt.plot(x_plt, C_plt, 'r')
 plt.plot(x_plt, U_plt, 'b')
