@@ -24,14 +24,14 @@ MRA = vp.MultiResolutionAnalysis(world, basis, max_depth)
 def C(x, y, z):
     eps = 80
     s = 0.1
-    ri = np.array([0., 0., 0.])         # position of the nucleus
-    Ri = 1.20                           # *10**-10 m van der waal radius of H
+    r1 = np.array([0., 0., 0.])         # position of the nucleus
+    R1 = 1.20                           # *10**-10 m van der waal radius of H
 
     r = np.array([x, y, z])
-    si = np.linalg.norm(r-ri) - Ri
-    C_i = 1 - 0.5*(1 + sp.erf(si/s))
+    s1 = np.linalg.norm(r-r1) - R1
+    C_1 = 1 - 0.5*(1 + sp.erf(s1/s))
 
-    return eps*(1 - C_i) + C_i
+    return eps*(1 - C_1) + C_1
 
 
 def rho(x, y, z):
@@ -59,8 +59,8 @@ C_plt = np.array([C_tree.evalf(x, 0, 0) for x in x_plt])
 U_plt = np.array([U_tree.evalf(x, 0, 0) for x in x_plt])
 # y_plt = np.array([C(x, 0, 0) for x in x_plt])
 
-# all the []_plt variables above are used to check the output by taking 2D
-# slices off the 3D functions
+# all the []_plt variables above are used to check the output of the functions
+# by taking 2D slices off the 3D shapes.
 
 plt.plot(x_plt, C_plt, 'r')
 plt.plot(x_plt, U_plt, 'b')
