@@ -1,4 +1,3 @@
-from scipy import *
 from scipy import special as sp
 
 
