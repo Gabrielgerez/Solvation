@@ -1,5 +1,4 @@
-from scipy import special as sp
-from sympy import *
+import solvation_models_funcs as sfuncs
 
 import vampyr3d as vp
 import numpy as np
@@ -19,4 +18,4 @@ basis = vp.InterpolatingBasis(order)
 
 MRA = vp.MultiResolutionAnalysis(world, basis, max_depth)
 
-help(vp.apply)
+help(vp.divergence)
