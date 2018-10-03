@@ -9,13 +9,12 @@ max_depth = 25
 order = 5
 prec = 1e-4
 
-corner = np.array([-1, -1, -1])
-boxes = np.array([2, 2, 2])
-
+corner = [-1, -1, -1]
+boxes = [2, 2, 2]
 world = vp.BoundingBox(min_scale, corner, boxes)
 
 basis = vp.InterpolatingBasis(order)
 
 MRA = vp.MultiResolutionAnalysis(world, basis, max_depth)
 
-help(vp.divergence)
+help(vp.Gaussian)
