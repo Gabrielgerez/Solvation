@@ -1,2 +1,6 @@
 *.so
 *.ipynb
+jupyter_notebooks
+.pytest_cache
+__pycache__
+test_vampyr3d.py
