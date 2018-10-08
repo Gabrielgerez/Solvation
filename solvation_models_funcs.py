@@ -125,6 +125,7 @@ def poisson_solver(V_tree, rho_tree, PoissonOperator, prec):
     vp.apply(prec, V_tree, P, rho_tree)
 
 
+# this doesn't work when called
 def find_err(Tree_a, Tree_b, prec):
     temp_tree = vp.FunctionTree(MRA)
     vp.add(prec/10, temp_tree, 1.0, Tree_a, -1.0, Tree_b)
