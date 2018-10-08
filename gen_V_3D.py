@@ -1,4 +1,4 @@
-from scipy import special as sp
+from scipy.special import erf
 
 
 import vampyr3d as vp
@@ -20,43 +20,36 @@ basis = vp.InterpolatingBasis(order)
 MRA = vp.MultiResolutionAnalysis(world, basis, max_depth)
 
 
-class E:
+class Cavity:
     def __init__(self):
-        self.r1 = np.array([0., 0., 0.])    # position of the nucleus
-        self.R1 = 1.20                      # *10**-10 m van der waal r. of H
+        self.s = 0.2
+        self.molecule = []
 
-        self.eps_inf = 80
-        self.s = 0.1
+        # self.R1 = 1.00
+        # self.r1 = [0, 0, 0]
+        # self.s = 0.1
+        # self.molecule = [(self.r1, self.R1)]
 
-        self.atoms = [[self.r1, self.R1]]
-        # will most surelly change it so just eps_inf and sigma are on __init__
+        # [(atom 1 information), (atom 2), ..., (atom I)]
+        # (atom position, VdW_radius)
+        # initialize with an atom of
+        # unit radius and placed at
+        # origo
 
     def add_atom(self, coord, VdW_radius):
-        self.atoms.append([coord, VdW_radius])
+        self.molecule.append((coord, VdW_radius))
 
     def __call__(self, x, y, z):
         r = np.array([x, y, z])
-
         C = 1
-        for atom in self.atoms:
-            s_n = np.linalg.norm(r-atom[0]) - atom[1]
-            Ci = 1 - 0.5*(1 + sp.erf(s_n/self.s))
+        for i in range(len(self.molecule)):
+            s_n = np.linalg.norm(r - self.molecule[i][0]) - self.molecule[i][1]
+            Ci = 1 - 0.5*(1 + erf(s_n/self.s))
             C = C*(1 - Ci)
 
         C = 1 - C
-        return self.eps_inf*(1 - C) + C
+        return C
 
 
-E_inst = E()
-
-E_tree = vp.FunctionTree(MRA)
-
-vp.project(prec, E_tree, E_inst)
-print(E_tree)
-
-
-x_plt = np.linspace(-2, 2, 100)
-E_plt = np.array([E_tree.evalf(x, 0, 0) for x in x_plt])
-
-plt.plot(x_plt, E_plt)
-plt.show()
+C_inst = Cavity()
+print(C_inst(0, 0, 0))

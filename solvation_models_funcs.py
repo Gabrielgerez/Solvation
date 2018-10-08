@@ -2,14 +2,13 @@ from scipy.special import erf
 import vampyr3d as vp
 import numpy as np
 
-
 min_scale = -4
 max_depth = 25
 order = 5
 prec = 1e-4
 
-corner = np.array([-1, -1, -1])
-boxes = np.array([2, 2, 2])
+corner = [-1, -1, -1]
+boxes = [2, 2, 2]
 
 world = vp.BoundingBox(min_scale, corner, boxes)
 
@@ -17,48 +16,51 @@ basis = vp.InterpolatingBasis(order)
 
 MRA = vp.MultiResolutionAnalysis(world, basis, max_depth)
 
+e_0 = 1
+e_inf = 78.30
+
 
 def Cavity(x, y, z):
-    s = 0.4
+    s = 0.2
     r1 = np.array([0., 0., 0.])     # position of the nucleus
     R1 = 1.00                     # *10**-10 m van der waal radius of an atom
 
     r = np.array([x, y, z])
     s1 = np.linalg.norm(r-r1) - R1
 
-    return 1 - 0.5*(1 + erf(s1/s))
+    return 1.0 - 0.5*(1 + erf(s1/s))
 
 
 def diel_f_Lin(x, y, z):
-    e_inf = 2.27
-    e_0 = 1
+    global e_inf
+    global e_0
     C = Cavity(x, y, z)
 
     return e_inf*(1 - C) + e_0*C
 
 
 def diel_f_Lin_inv(x, y, z):
-    e_inf = 2.27
-    e_0 = 1
+    global e_inf
+    global e_0
     C = Cavity(x, y, z)
 
     return 1/(e_inf*(1 - C) + e_0*C)
 
 
 def diel_f_exp(x, y, z):
-    e_inf = 2.27
-    e_0 = 1
+    global e_inf
+    global e_0
     C = Cavity(x, y, z)
 
-    return e_0*np.exp(np.log10(e_inf/e_0)*(1 - C))
+    return e_0*np.exp(np.log(e_inf/e_0)*(1 - C))
 
 
 def diel_f_exp_inv(x, y, z):
-    e_inf = 2.27
-    e_0 = 1
+    global e_inf
+    global e_0
     C = Cavity(x, y, z)
 
-    return (e_0**(-1))*np.exp(np.log10(e_0/e_inf)*(1 - C))
+    return (e_0**(-1))*np.exp(np.log(e_0/e_inf)*(1 - C))
 
 
 def rho_eff_Lin(x, y, z):
@@ -77,7 +79,7 @@ def rho_eff_exp(x, y, z):
 
 def D_functree(D, in_tree, MRA):
     '''
-    differentiates a 3d functions
+    differentiates a 3d FunctionTree
 
     Args:
         D: derivative operator
@@ -108,28 +110,19 @@ def dot_product(prec, factor_array1, factor_array2, out_tree, MRA):
     add_tree1 = vp.FunctionTree(MRA)
     mult_tree1 = vp.FunctionTree(MRA)
     mult_tree2 = vp.FunctionTree(MRA)
+    mult_tree3 = vp.FunctionTree(MRA)
 
     vp.multiply(prec, mult_tree1, 1, factor_array1[0], factor_array2[0])
     vp.multiply(prec, mult_tree2, 1, factor_array1[1], factor_array2[1])
+    vp.multiply(prec, mult_tree3, 1, factor_array1[2], factor_array2[2])
 
     vp.add(prec/10, add_tree1, 1.0, mult_tree1, 1.0, mult_tree2)
-    mult_tree1.clear()
-
-    vp.multiply(prec, mult_tree1, 1, factor_array1[2], factor_array2[2])
-    vp.add(prec/10, out_tree, 1.0, mult_tree1, 1.0, add_tree1)
+    vp.add(prec/10, out_tree, 1.0, mult_tree3, 1.0, add_tree1)
 
 
 def poisson_solver(V_tree, rho_tree, PoissonOperator, prec):
     P = PoissonOperator
     vp.apply(prec, V_tree, P, rho_tree)
-
-
-# don't use this
-def setup_initial_guess(V_tree, rho_eff_tree, func, PoissonOperator, prec):
-    P = PoissonOperator
-    vp.project(prec, rho_eff_tree, func)
-    rho_eff_tree.normalize()
-    poisson_solver(V_tree, rho_eff_tree, P, prec)
 
 
 def find_err(Tree_a, Tree_b, prec):
@@ -149,14 +142,14 @@ def clone_tree(in_tree, out_tree, prec):
 
 def gamma_exp(DC_vector, DV_vector, out_tree, prec, MRA):
     dot_product(prec, DV_vector, DC_vector, out_tree, MRA)
-    out_tree.rescale(1/4*np.pi)
+    out_tree.rescale((1/(4*np.pi)))
 
 
 def gamma_Lin(eps_inv_tree, DC_vector, DV_vector, out_tree, prec, MRA):
     temp_tree = vp.FunctionTree(MRA)
     dot_product(prec, DV_vector, DC_vector, temp_tree, MRA)
     vp.multiply(prec, out_tree, 1, temp_tree, eps_inv_tree)
-    out_tree.rescale(1/4*np.pi)  # probably wrong recheck
+    out_tree.rescale((1/(4*np.pi)))  # probably wrong recheck
 
 
 def V_solver_Lin(prec, MRA, DerivativeOperator, PoissonOperator, eps_inv_tree,
@@ -201,17 +194,3 @@ def V_solver_exp(rho_eff_tree, V_tree, C_tree, DerivativeOperator,
     poisson_solver(V_tree, poiss_tree, P, prec)
 
     return gamma_tree
-
-
-# not needed
-def new_rho_eff(rho_eff_tree, V_tree, gamma_tree, DerivativeOperator, MRA):
-
-    D = DerivativeOperator
-
-    DV_vector = vp.gradient(D, V_tree)
-    DDV_tree = vp.FunctionTree(MRA)
-    vp.divergence(DDV_tree, D, DV_vector)
-
-    rho_eff_tree.clear()
-    vp.add(prec, rho_eff_tree, 1, DDV_tree, 1, gamma_tree)
-    rho_eff_tree.normalize()

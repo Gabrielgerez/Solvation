@@ -1,17 +1,14 @@
 import solvation_models_funcs as sfuncs
-from scipy import special as spec
-
 import vampyr3d as vp
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
 
 min_scale = -4
 max_depth = 25
 order = 7
 prec = 1e-6
 
-e_inf = 2.27
+e_inf = 78.30
 e_0 = 1
 
 corner = [-1, -1, -1]
@@ -30,7 +27,7 @@ D = vp.ABGVOperator(MRA, 0.0, 0.0)
 rho_tree = vp.FunctionTree(MRA)
 pos = [0, 0, 0]
 power = [0, 0, 0]
-beta = 2000
+beta = 100
 alpha = (beta/np.pi)*np.sqrt(beta / np.pi)
 rho_gauss = vp.GaussFunc(beta, alpha, pos, power)
 vp.build_grid(rho_tree, rho_gauss)
@@ -50,7 +47,7 @@ vp.multiply(prec, rho_eff_tree, 1, eps_inv_tree, rho_tree)
 # this will not change
 
 vp.project(prec, Cavity_tree, sfuncs.Cavity)
-Cavity_tree.rescale(np.log10(e_0/e_inf))
+Cavity_tree.rescale(np.log(e_0/e_inf))
 
 # start solving the poisson equation with an initial guess
 sfuncs.poisson_solver(V_tree, rho_eff_tree, P, prec)
@@ -76,7 +73,7 @@ while(error > prec):
     print('iterations %i error %f energy %f' % (j, error, a))
 
     print('exact energy %f' % ((1 - e_inf)/e_inf))
-    if(j % 5 == 0):
+    if(j % 5 == 0 or j == 1):
         V_exp_plt = np.array([V_tree.evalf(x, 0, 0) for x in x_plt])
         eps_inv_plt = np.array([sfuncs.diel_f_exp_inv(x, 0, 0) for x in x_plt])
         plt.figure()
@@ -86,4 +83,14 @@ while(error > prec):
         plt.title('iterations %i' % (j))
         plt.show()
 
+    elif(error <= prec):
+        print('converged')
+        V_exp_plt = np.array([V_tree.evalf(x, 0, 0) for x in x_plt])
+        eps_inv_plt = np.array([sfuncs.diel_f_exp_inv(x, 0, 0) for x in x_plt])
+        plt.figure()
+        plt.plot(x_plt, V_exp_plt, 'b')
+        plt.plot(x_plt, 1/x_plt, 'g')
+        plt.plot(x_plt, eps_inv_plt, 'y')
+        plt.title('iterations %i' % (j))
+        plt.show()
     j += 1

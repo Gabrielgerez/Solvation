@@ -1,10 +1,7 @@
 import solvation_models_funcs as sfuncs
-from scipy import special as spec
-
 import vampyr3d as vp
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
 
 min_scale = -4
 max_depth = 25
@@ -76,7 +73,7 @@ while(error > prec):
     print('iterations %i error %f energy %f' % (j, error, b))
 
     print('exact energy %f' % ((1 - e_inf)/e_inf))
-    if(j % 5 == 0):
+    if(j % 5 == 0 or j == 1 or error <= prec):
 
         V_Lin_plt = np.array([V_tree.evalf(x, 0, 0) for x in x_plt])
         eps_inv_plt = np.array([sfuncs.diel_f_Lin_inv(x, 0, 0) for x in x_plt])
