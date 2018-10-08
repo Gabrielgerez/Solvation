@@ -31,7 +31,7 @@ class Cavity:
         # self.molecule = [(self.r1, self.R1)]
 
         # [(atom 1 information), (atom 2), ..., (atom I)]
-        # (atom position, VdW_radius)
+        # [(atom position, VdW_radius), ...]
         # initialize with an atom of
         # unit radius and placed at
         # origo
