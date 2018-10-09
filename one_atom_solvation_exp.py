@@ -8,8 +8,8 @@ max_depth = 25
 order = 7
 prec = 1e-6
 
-e_inf = 78.30
-e_0 = 1
+charge = 1.0
+Radius = 3.0
 
 corner = [-1, -1, -1]
 boxes = [2, 2, 2]
@@ -23,74 +23,38 @@ MRA = vp.MultiResolutionAnalysis(world, basis, max_depth)
 P = vp.PoissonOperator(MRA, prec)
 D = vp.ABGVOperator(MRA, 0.0, 0.0)
 
-# making rho as a GaussFunc
 rho_tree = vp.FunctionTree(MRA)
-pos = [0, 0, 0]
-power = [0, 0, 0]
-beta = 100
-alpha = (beta/np.pi)*np.sqrt(beta / np.pi)
-rho_gauss = vp.GaussFunc(beta, alpha, pos, power)
-vp.build_grid(rho_tree, rho_gauss)
-vp.project_gauss(prec, rho_tree, rho_gauss)
-# rho_tree has a GaussFunc for rho
-
-# exponential dielectric function
-eps_inv_tree = vp.FunctionTree(MRA)
-rho_eff_tree = vp.FunctionTree(MRA)
-Cavity_tree = vp.FunctionTree(MRA)
-
 V_tree = vp.FunctionTree(MRA)
 
-# making rho_eff_tree containing rho_eff
-vp.project(prec, eps_inv_tree, sfuncs.diel_f_exp_inv)
-vp.multiply(prec, rho_eff_tree, 1, eps_inv_tree, rho_tree)
-# this will not change
+gamma_tree = sfuncs.V_SCF_exp(MRA, prec, P, D, charge, Radius, rho_tree,
+                              V_tree)
+# finding E_r
+print('Finding Reaction field energy')
 
-vp.project(prec, Cavity_tree, sfuncs.Cavity)
-Cavity_tree.rescale(np.log(e_0/e_inf))
+V_r_tree = vp.FunctionTree(MRA)
+eps_diff_tree = vp.FunctionTree(MRA)
+rho_diff_tree = vp.FunctionTree(MRA)
+poiss_tree = vp.FunctionTree(MRA)
 
-# start solving the poisson equation with an initial guess
-sfuncs.poisson_solver(V_tree, rho_eff_tree, P, prec)
+print('initialized FunctionTrees')
 
-x_plt = np.linspace(-2, 2, 60)
-j = 1
-error = 1
-old_V_tree = vp.FunctionTree(MRA)
+vp.project(prec, eps_diff_tree, sfuncs.exp_eps_diff)
+vp.multiply(prec, rho_diff_tree, 1, eps_diff_tree, rho_tree)
+vp.add(prec, poiss_tree, 1, gamma_tree, -1, rho_diff_tree)
 
-while(error > prec):
-    # solving the poisson equation once
-    gamma_tree = sfuncs.V_solver_exp(rho_eff_tree, V_tree,
-                                     Cavity_tree, D, P, MRA, prec,
-                                     old_V_tree)
+sfuncs.poisson_solver(V_r_tree, poiss_tree, P, prec)
 
-    # finding error once
-    temp_tree = vp.FunctionTree(MRA)
-    vp.add(prec/10, temp_tree, 1.0, V_tree, -1.0, old_V_tree)
-    error = np.sqrt(temp_tree.getSquareNorm())
+integral_tree = vp.FunctionTree(MRA)
+vp.multiply(prec, integral_tree, 1, rho_tree, V_r_tree)
 
-    a = gamma_tree.integrate()
+E_r = 0.5*integral_tree.integrate()
+print('Reaction field energy with V_r:\t\t', E_r)
 
-    print('iterations %i error %f energy %f' % (j, error, a))
 
-    print('exact energy %f' % ((1 - e_inf)/e_inf))
-    if(j % 5 == 0 or j == 1):
-        V_exp_plt = np.array([V_tree.evalf(x, 0, 0) for x in x_plt])
-        eps_inv_plt = np.array([sfuncs.diel_f_exp_inv(x, 0, 0) for x in x_plt])
-        plt.figure()
-        plt.plot(x_plt, V_exp_plt, 'b')
-        plt.plot(x_plt, 1/x_plt, 'g')
-        plt.plot(x_plt, eps_inv_plt, 'y')
-        plt.title('iterations %i' % (j))
-        plt.show()
+delta_G = sfuncs.exact_delta_G(charge, Radius)
+print('delta G:\t\t\t\t', delta_G)
 
-    elif(error <= prec):
-        print('converged')
-        V_exp_plt = np.array([V_tree.evalf(x, 0, 0) for x in x_plt])
-        eps_inv_plt = np.array([sfuncs.diel_f_exp_inv(x, 0, 0) for x in x_plt])
-        plt.figure()
-        plt.plot(x_plt, V_exp_plt, 'b')
-        plt.plot(x_plt, 1/x_plt, 'g')
-        plt.plot(x_plt, eps_inv_plt, 'y')
-        plt.title('iterations %i' % (j))
-        plt.show()
-    j += 1
+outfile = open('data.txt', 'a')
+outfile.write('|q:\t%f\t|Radius:\t%f\t|E_r:\t%f\t|delta_G:\t%f\n' % (charge,
+              Radius, E_r, delta_G))
+outfile.close()

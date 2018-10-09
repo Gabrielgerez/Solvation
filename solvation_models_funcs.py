@@ -1,6 +1,7 @@
-from scipy.special import erf
+from scipy import special
 import vampyr3d as vp
 import numpy as np
+from solvation_classes import C_class
 
 min_scale = -4
 max_depth = 25
@@ -17,23 +18,44 @@ basis = vp.InterpolatingBasis(order)
 MRA = vp.MultiResolutionAnalysis(world, basis, max_depth)
 
 e_0 = 1
-e_inf = 78.30
+e_inf = 2
+
+Cavity = C_class()
+
+Cavity.set_unit_atom()
 
 
-def Cavity(x, y, z):
-    s = 0.2
-    r1 = np.array([0., 0., 0.])     # position of the nucleus
-    R1 = 1.00                     # *10**-10 m van der waal radius of an atom
+def input_new_molecule(molecule):
+    '''molecule is an array of tuples. each tuple represents an atom with
+    atom position in index 0 and atom radius in index 1'''
+    global Cavity
+    Cavity.clear()
+    for atom in molecule:
+        Cavity.add_atom(atom)
 
-    r = np.array([x, y, z])
-    s1 = np.linalg.norm(r-r1) - R1
 
-    return 1.0 - 0.5*(1 + erf(s1/s))
+def append_atom(atom):
+    '''atom is the same as atom in C_class'''
+    global Cavity
+    Cavity.add_atom(atom)
+
+
+def Change_unit_radius(new_radius):
+    global Cavity
+    Cavity.R1 = new_radius
+    Cavity.set_unit_atom()
+
+
+def change_unit_pos(new_pos):
+    global Cavity
+    Cavity.r1 = new_pos
+    Cavity.set_unit_atom()
 
 
 def diel_f_Lin(x, y, z):
     global e_inf
     global e_0
+    global Cavity
     C = Cavity(x, y, z)
 
     return e_inf*(1 - C) + e_0*C
@@ -42,6 +64,7 @@ def diel_f_Lin(x, y, z):
 def diel_f_Lin_inv(x, y, z):
     global e_inf
     global e_0
+    global Cavity
     C = Cavity(x, y, z)
 
     return 1/(e_inf*(1 - C) + e_0*C)
@@ -50,6 +73,7 @@ def diel_f_Lin_inv(x, y, z):
 def diel_f_exp(x, y, z):
     global e_inf
     global e_0
+    global Cavity
     C = Cavity(x, y, z)
 
     return e_0*np.exp(np.log(e_inf/e_0)*(1 - C))
@@ -58,6 +82,7 @@ def diel_f_exp(x, y, z):
 def diel_f_exp_inv(x, y, z):
     global e_inf
     global e_0
+    global Cavity
     C = Cavity(x, y, z)
 
     return (e_0**(-1))*np.exp(np.log(e_0/e_inf)*(1 - C))
@@ -120,9 +145,9 @@ def dot_product(prec, factor_array1, factor_array2, out_tree, MRA):
     vp.add(prec/10, out_tree, 1.0, mult_tree3, 1.0, add_tree1)
 
 
-def poisson_solver(V_tree, rho_tree, PoissonOperator, prec):
+def poisson_solver(out_tree, in_tree, PoissonOperator, prec):
     P = PoissonOperator
-    vp.apply(prec, V_tree, P, rho_tree)
+    vp.apply(prec, out_tree, P, in_tree)
 
 
 # this doesn't work when called
@@ -195,3 +220,94 @@ def V_solver_exp(rho_eff_tree, V_tree, C_tree, DerivativeOperator,
     poisson_solver(V_tree, poiss_tree, P, prec)
 
     return gamma_tree
+
+
+def exp_eps_diff(x, y, z):
+    return (diel_f_exp(x, y, z) - 1)*diel_f_exp_inv(x, y, z)
+
+
+def Lin_eps_diff(x, y, z):
+    return (diel_f_Lin(x, y, z) - 1)*diel_f_Lin_inv(x, y, z)
+
+
+def make_gauss_tree(beta, alpha, pos, power, gauss_tree, prec):
+    rho_gauss = vp.GaussFunc(beta, alpha, pos, power)
+    vp.build_grid(gauss_tree, rho_gauss)
+    vp.project_gauss(prec, gauss_tree, rho_gauss)
+
+
+def V_SCF_exp(MRA, prec, P, D, charge, Radius, rho_tree, V_tree):
+    global e_inf
+    global e_0
+    global Cavity
+
+    Change_unit_radius(Radius)
+
+    print('making rho')
+
+    # making rho as a GaussFunc
+    pos = [0, 0, 0]
+    power = [0, 0, 0]
+    beta = 100
+    alpha = (beta/np.pi)*np.sqrt(beta / np.pi)*charge
+    make_gauss_tree(beta, alpha, pos, power, rho_tree, prec)
+    # rho_tree has a GaussFunc for rho
+
+    print('initializing FunctionTrees')
+
+    # initializing FunctionTrees
+    eps_inv_tree = vp.FunctionTree(MRA)
+    rho_eff_tree = vp.FunctionTree(MRA)
+    Cavity_tree = vp.FunctionTree(MRA)
+
+    print('projecting all the FunctionTrees')
+
+    # making rho_eff_tree containing rho_eff
+    vp.project(prec, eps_inv_tree, diel_f_exp_inv)
+    vp.multiply(prec, rho_eff_tree, 1, eps_inv_tree, rho_tree)
+    # this will not change
+
+    print('projected rho_eff')
+
+    vp.project(prec, Cavity_tree, Cavity)
+    Cavity_tree.rescale(np.log(e_0/e_inf))
+
+    print('prepared Cavity_tree')
+
+    # start solving the poisson equation with an initial guess
+    poisson_solver(V_tree, rho_eff_tree, P, prec)
+
+    print('made the first guess')
+
+    j = 1
+    error = 1
+    old_V_tree = vp.FunctionTree(MRA)
+
+    print('starting loop')
+
+    while(error > prec):
+        # solving the poisson equation once
+        gamma_tree = V_solver_exp(rho_eff_tree, V_tree,
+                                  Cavity_tree, D, P, MRA, prec,
+                                  old_V_tree)
+
+        # finding error once
+        temp_tree = vp.FunctionTree(MRA)
+        vp.add(prec/10, temp_tree, 1.0, V_tree, -1.0, old_V_tree)
+        error = np.sqrt(temp_tree.getSquareNorm())
+
+        a = gamma_tree.integrate()
+
+        print('iter:\t\t\t%i\nerror:\t\t\t%f\nR charge:\t\t%f' % (j, error, a))
+
+        print('exact Reaction charge:\t%f\n\n' % ((1 - e_inf)/e_inf))
+        if(error <= prec):
+            print('converged total electrostatic potential\n')
+        j += 1
+
+    return gamma_tree
+
+
+def exact_delta_G(charge, Radius):
+    global e_inf
+    return ((1 - e_inf)*(charge**2))/(2*e_inf*Radius)
